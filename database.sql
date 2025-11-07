@@ -3,63 +3,42 @@
 CREATE DATABASE IF NOT EXISTS trashbin_management;
 USE trashbin_management;
 
-ALTER TABLE users
-ADD COLUMN reset_token_hash VARCHAR(64) NULL DEFAULT NULL,
-ADD COLUMN reset_token_expires_at DATETIME NULL DEFAULT NULL;
-DESCRIBE users;
--- ==================================================
--- Table: users
--- Description: Stores admin and janitor user accounts
--- ==================================================
-CREATE TABLE IF NOT EXISTS users (
-    user_id INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS admins (
+    admin_id INT AUTO_INCREMENT PRIMARY KEY,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     phone VARCHAR(20),
     password VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'janitor') NOT NULL DEFAULT 'janitor',
     status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
     employee_id VARCHAR(50) UNIQUE,
     profile_picture VARCHAR(255),
+    reset_token_hash VARCHAR(64) NULL DEFAULT NULL,
+    reset_token_expires_at DATETIME NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_email (email),
-    INDEX idx_role (role),
     INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ==================================================
--- Table: password_reset_tokens
--- Description: Stores password reset tokens for users
--- ==================================================
-USE trashbin_management;
-DROP TABLE password_reset_tokens;
-
-
-CREATE TABLE IF NOT EXISTS password_reset_tokens (
-    token_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    token VARCHAR(255) UNIQUE NOT NULL,
-    token_hash VARCHAR(255) NOT NULL,
-    expires_at TIMESTAMP NOT NULL,
-    is_used BOOLEAN DEFAULT FALSE,
-    used_at TIMESTAMP NULL,
+CREATE TABLE IF NOT EXISTS janitors (
+    janitor_id INT AUTO_INCREMENT PRIMARY KEY,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    phone VARCHAR(20),
+    password VARCHAR(255) NOT NULL,
+    status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+    employee_id VARCHAR(50) UNIQUE,
+    profile_picture VARCHAR(255),
+    reset_token_hash VARCHAR(64) NULL DEFAULT NULL,
+    reset_token_expires_at DATETIME NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    INDEX idx_token (token_hash),
-    INDEX idx_user_id (user_id),
-    INDEX idx_expires_at (expires_at)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_email (email),
+    INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Add index to improve query performance
-ALTER TABLE password_reset_tokens ADD INDEX idx_is_used (is_used);
-
-
--- ==================================================
--- Table: bins
--- Description: Stores all trash bins information
--- ==================================================
 CREATE TABLE IF NOT EXISTS bins (
     bin_id INT AUTO_INCREMENT PRIMARY KEY,
     bin_code VARCHAR(50) UNIQUE NOT NULL,
@@ -72,18 +51,16 @@ CREATE TABLE IF NOT EXISTS bins (
     longitude DECIMAL(11, 8),
     installation_date DATE,
     notes TEXT,
+    created_by INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (assigned_to) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (assigned_to) REFERENCES janitors(janitor_id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by) REFERENCES admins(admin_id) ON DELETE SET NULL,
     INDEX idx_status (status),
     INDEX idx_location (location),
     INDEX idx_assigned_to (assigned_to)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ==================================================
--- Table: collections
--- Description: Records of bin emptying and collection activities
--- ==================================================
 CREATE TABLE IF NOT EXISTS collections (
     collection_id INT AUTO_INCREMENT PRIMARY KEY,
     bin_id INT NOT NULL,
@@ -95,16 +72,12 @@ CREATE TABLE IF NOT EXISTS collections (
     completed_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (bin_id) REFERENCES bins(bin_id) ON DELETE CASCADE,
-    FOREIGN KEY (janitor_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (janitor_id) REFERENCES janitors(janitor_id) ON DELETE CASCADE,
     INDEX idx_bin_id (bin_id),
     INDEX idx_janitor_id (janitor_id),
     INDEX idx_collected_at (collected_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ==================================================
--- Table: tasks
--- Description: Task history and assignments
--- ==================================================
 CREATE TABLE IF NOT EXISTS tasks (
     task_id INT AUTO_INCREMENT PRIMARY KEY,
     bin_id INT NOT NULL,
@@ -117,19 +90,16 @@ CREATE TABLE IF NOT EXISTS tasks (
     completed_at TIMESTAMP NULL,
     notes TEXT,
     FOREIGN KEY (bin_id) REFERENCES bins(bin_id) ON DELETE CASCADE,
-    FOREIGN KEY (janitor_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (janitor_id) REFERENCES janitors(janitor_id) ON DELETE CASCADE,
     INDEX idx_janitor_id (janitor_id),
     INDEX idx_status (status),
     INDEX idx_priority (priority)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ==================================================
--- Table: notifications
--- Description: System notifications and alerts
--- ==================================================
 CREATE TABLE IF NOT EXISTS notifications (
     notification_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT,
+    admin_id INT NULL,
+    janitor_id INT NULL,
     bin_id INT,
     notification_type ENUM('critical', 'warning', 'info', 'success') NOT NULL DEFAULT 'info',
     title VARCHAR(255) NOT NULL,
@@ -137,18 +107,14 @@ CREATE TABLE IF NOT EXISTS notifications (
     is_read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     read_at TIMESTAMP NULL,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (admin_id) REFERENCES admins(admin_id) ON DELETE CASCADE,
+    FOREIGN KEY (janitor_id) REFERENCES janitors(janitor_id) ON DELETE CASCADE,
     FOREIGN KEY (bin_id) REFERENCES bins(bin_id) ON DELETE CASCADE,
-    INDEX idx_user_id (user_id),
     INDEX idx_is_read (is_read),
     INDEX idx_notification_type (notification_type),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ==================================================
--- Table: reports
--- Description: Generated reports and analytics
--- ==================================================
 CREATE TABLE IF NOT EXISTS reports (
     report_id INT AUTO_INCREMENT PRIMARY KEY,
     report_name VARCHAR(255) NOT NULL,
@@ -161,15 +127,11 @@ CREATE TABLE IF NOT EXISTS reports (
     status ENUM('generating', 'completed', 'failed') NOT NULL DEFAULT 'generating',
     file_path VARCHAR(500),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (generated_by) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (generated_by) REFERENCES admins(admin_id) ON DELETE CASCADE,
     INDEX idx_generated_by (generated_by),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ==================================================
--- Table: bin_status_history
--- Description: Historical records of bin status changes
--- ==================================================
 CREATE TABLE IF NOT EXISTS bin_status_history (
     history_id INT AUTO_INCREMENT PRIMARY KEY,
     bin_id INT NOT NULL,
@@ -179,18 +141,15 @@ CREATE TABLE IF NOT EXISTS bin_status_history (
     notes TEXT,
     changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (bin_id) REFERENCES bins(bin_id) ON DELETE CASCADE,
-    FOREIGN KEY (changed_by) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (changed_by) REFERENCES admins(admin_id) ON DELETE SET NULL,
     INDEX idx_bin_id (bin_id),
     INDEX idx_changed_at (changed_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ==================================================
--- Table: activity_logs
--- Description: System activity and audit logs
--- ==================================================
 CREATE TABLE IF NOT EXISTS activity_logs (
     log_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT,
+    admin_id INT NULL,
+    janitor_id INT NULL,
     action VARCHAR(100) NOT NULL,
     entity_type VARCHAR(50),
     entity_id INT,
@@ -198,11 +157,14 @@ CREATE TABLE IF NOT EXISTS activity_logs (
     ip_address VARCHAR(45),
     user_agent VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
-    INDEX idx_user_id (user_id),
+    FOREIGN KEY (admin_id) REFERENCES admins(admin_id) ON DELETE SET NULL,
+    FOREIGN KEY (janitor_id) REFERENCES janitors(janitor_id) ON DELETE SET NULL,
+    INDEX idx_admin_id (admin_id),
+    INDEX idx_janitor_id (janitor_id),
     INDEX idx_created_at (created_at),
     INDEX idx_action (action)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 -- ==================================================
 -- INSERT SAMPLE DATA
@@ -210,21 +172,41 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 
 -- Insert Admin User
 -- Password: password
-INSERT INTO users (first_name, last_name, email, phone, password, role, status, employee_id) VALUES
-('Admin', 'User', 'admin@gmail.com', '+1 (555) 000-0000', '$2y$10$zrso/wR/n/AIPhvxa1oReOLFVS0aLAUAD/6wNbUbYJwdpBgjvzb62', 'admin', 'active', 'ADM-001');
+INSERT INTO admins (
+    first_name,
+    last_name,
+    email,
+    phone,
+    password,
+    status,
+    employee_id
+) VALUES (
+    'Admin',
+    'User',
+    'admin@gmail.com',
+    '+1 (555) 000-0000',
+    '$2y$10$zrso/wR/n/AIPhvxa1oReOLFVS0aLAUAD/6wNbUbYJwdpBgjvzb62',
+    'active',
+    'ADM-001'
+);
 
-SELECT * FROM users;
+SELECT * FROM admins;
 
-
-SET SQL_SAFE_UPDATES = 0;
-DELETE FROM users;
 -- Default password for all users: password
 
 -- Insert Sample Janitors
-INSERT INTO users (first_name, last_name, email, phone, password, role, status, employee_id) VALUES
-('John', 'Doe', 'john@gmail.com', '+1 (555) 123-4567', '$2y$10$zrso/wR/n/AIPhvxa1oReOLFVS0aLAUAD/6wNbUbYJwdpBgjvzb62', 'janitor', 'active', 'JAN-001'),
-('Jane', 'Smith', 'jane@gmail.com', '+1 (555) 234-5678', '$2y$10$zrso/wR/n/AIPhvxa1oReOLFVS0aLAUAD/6wNbUbYJwdpBgjvzb62', 'janitor', 'active', 'JAN-002'),
-('Bob', 'Johnson', 'bob@gmail.com', '+1 (555) 345-6789', '$2y$10$zrso/wR/n/AIPhvxa1oReOLFVS0aLAUAD/6wNbUbYJwdpBgjvzb62', 'janitor', 'active', 'JAN-003');
+INSERT INTO janitors (
+    first_name,
+    last_name,  
+    email,
+    phone,
+    password,
+    status,
+    employee_id
+) VALUES
+('John', 'Doe', 'john@gmail.com', '+1 (555) 123-4567', '$2y$10$zrso/wR/n/AIPhvxa1oReOLFVS0aLAUAD/6wNbUbYJwdpBgjvzb62', 'active', 'JAN-001'),
+('Jane', 'Smith', 'jane@gmail.com', '+1 (555) 234-5678', '$2y$10$zrso/wR/n/AIPhvxa1oReOLFVS0aLAUAD/6wNbUbYJwdpBgjvzb62', 'active', 'JAN-002'),
+('Bob', 'Johnson', 'bob@gmail.com', '+1 (555) 345-6789', '$2y$10$zrso/wR/n/AIPhvxa1oReOLFVS0aLAUAD/6wNbUbYJwdpBgjvzb62', 'active', 'JAN-003');
 
 -- Insert Sample Bins 
 SELECT * FROM bins;
