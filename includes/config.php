@@ -42,7 +42,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 // ========== AUTHENTICATION FUNCTIONS ==========
-
+ 
 // Check if any user (admin or janitor) is logged in
 function isLoggedIn() {
     return isset($_SESSION['admin_id']) || isset($_SESSION['janitor_id']);
